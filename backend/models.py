@@ -31,6 +31,12 @@ class User(Base):
     comments = relationship("Comment", back_populates="author", cascade="all, delete-orphan")
     stories = relationship("Story", back_populates="author", cascade="all, delete-orphan")
     story_views = relationship("StoryView", back_populates="viewer", cascade="all, delete-orphan")
+
+    # Direct Messages
+    sent_messages = relationship("Message", foreign_keys="Message.sender_id", back_populates="sender", cascade="all, delete-orphan")
+    received_messages = relationship("Message", foreign_keys="Message.receiver_id", back_populates="receiver", cascade="all, delete-orphan")
+    conversations_as_user1 = relationship("Conversation", foreign_keys="Conversation.user1_id", back_populates="user1", cascade="all, delete-orphan")
+    conversations_as_user2 = relationship("Conversation", foreign_keys="Conversation.user2_id", back_populates="user2", cascade="all, delete-orphan")
     
     # Seguidores e seguindo
     followers = relationship(
@@ -127,3 +133,44 @@ class StoryView(Base):
     # Relacionamentos
     story = relationship("Story", back_populates="views")
     viewer = relationship("User", back_populates="story_views")
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user1_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user2_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relacionamentos
+    user1 = relationship("User", foreign_keys=[user1_id], back_populates="conversations_as_user1")
+    user2 = relationship("User", foreign_keys=[user2_id], back_populates="conversations_as_user2")
+    messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
+
+    @property
+    def last_message(self):
+        if self.messages:
+            return max(self.messages, key=lambda m: m.created_at)
+        return None
+
+    def get_other_user(self, current_user_id):
+        return self.user2 if self.user1_id == current_user_id else self.user1
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    receiver_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=True)
+    image_url = Column(String, nullable=True)
+    message_type = Column(String, default="text")  # text, image
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relacionamentos
+    conversation = relationship("Conversation", back_populates="messages")
+    sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_messages")
+    receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_messages")

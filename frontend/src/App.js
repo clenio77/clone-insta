@@ -7,6 +7,7 @@ import Home from './pages/Home';
 import Profile from './pages/Profile';
 import Upload from './pages/Upload';
 import CreateStory from './pages/CreateStory';
+import Messages from './pages/Messages';
 import { authAPI } from './services/api';
 
 function App() {
@@ -70,6 +71,14 @@ function App() {
             <Route
               path="/create-story"
               element={user ? <CreateStory /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/messages"
+              element={user ? <Messages currentUser={user} /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/messages/:conversationId"
+              element={user ? <Messages currentUser={user} /> : <Navigate to="/login" />}
             />
             <Route
               path="/profile/:username"

@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, F
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_, desc
 from datetime import timedelta, datetime
 import shutil
 import os
@@ -9,8 +10,8 @@ from typing import List
 import uuid
 
 from database import SessionLocal, engine, get_db
-from models import Base, User, Post, Like, Comment, Story, StoryView
-from schemas import UserCreate, UserLogin, Token, PostCreate, CommentCreate, User as UserSchema, Post as PostSchema, Comment as CommentSchema, UserProfile, StoryCreate, Story as StorySchema, StoryView as StoryViewSchema
+from models import Base, User, Post, Like, Comment, Story, StoryView, Conversation, Message
+from schemas import UserCreate, UserLogin, Token, PostCreate, CommentCreate, User as UserSchema, Post as PostSchema, Comment as CommentSchema, UserProfile, StoryCreate, Story as StorySchema, StoryView as StoryViewSchema, MessageCreate, Message as MessageSchema, Conversation as ConversationSchema
 from auth import authenticate_user, create_access_token, get_current_active_user, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
 
 # Criar tabelas
@@ -405,6 +406,219 @@ async def get_story_views(
 
     views = db.query(StoryView).filter(StoryView.story_id == story_id).order_by(StoryView.viewed_at.desc()).all()
     return views
+
+# Direct Messages endpoints
+@app.get("/conversations", response_model=List[ConversationSchema])
+async def get_conversations(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    conversations = db.query(Conversation).filter(
+        or_(
+            Conversation.user1_id == current_user.id,
+            Conversation.user2_id == current_user.id
+        )
+    ).order_by(desc(Conversation.updated_at)).all()
+
+    # Adicionar dados extras para cada conversa
+    for conv in conversations:
+        conv.other_user = conv.get_other_user(current_user.id)
+        # Contar mensagens não lidas
+        conv.unread_count = db.query(Message).filter(
+            Message.conversation_id == conv.id,
+            Message.receiver_id == current_user.id,
+            Message.is_read == False
+        ).count()
+
+    return conversations
+
+@app.get("/conversations/{user_id}", response_model=ConversationSchema)
+async def get_or_create_conversation(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot create conversation with yourself")
+
+    # Verificar se o usuário existe
+    other_user = db.query(User).filter(User.id == user_id).first()
+    if not other_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Buscar conversa existente
+    conversation = db.query(Conversation).filter(
+        or_(
+            and_(Conversation.user1_id == current_user.id, Conversation.user2_id == user_id),
+            and_(Conversation.user1_id == user_id, Conversation.user2_id == current_user.id)
+        )
+    ).first()
+
+    # Criar nova conversa se não existir
+    if not conversation:
+        conversation = Conversation(
+            user1_id=min(current_user.id, user_id),
+            user2_id=max(current_user.id, user_id)
+        )
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+
+    # Adicionar dados extras
+    conversation.other_user = conversation.get_other_user(current_user.id)
+    conversation.unread_count = db.query(Message).filter(
+        Message.conversation_id == conversation.id,
+        Message.receiver_id == current_user.id,
+        Message.is_read == False
+    ).count()
+
+    return conversation
+
+@app.get("/conversations/{conversation_id}/messages", response_model=List[MessageSchema])
+async def get_messages(
+    conversation_id: int,
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    # Verificar se o usuário faz parte da conversa
+    conversation = db.query(Conversation).filter(
+        Conversation.id == conversation_id,
+        or_(
+            Conversation.user1_id == current_user.id,
+            Conversation.user2_id == current_user.id
+        )
+    ).first()
+
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    messages = db.query(Message).filter(
+        Message.conversation_id == conversation_id
+    ).order_by(desc(Message.created_at)).offset(skip).limit(limit).all()
+
+    # Marcar mensagens como lidas
+    unread_messages = db.query(Message).filter(
+        Message.conversation_id == conversation_id,
+        Message.receiver_id == current_user.id,
+        Message.is_read == False
+    ).all()
+
+    for message in unread_messages:
+        message.is_read = True
+
+    if unread_messages:
+        db.commit()
+
+    return list(reversed(messages))  # Retornar em ordem cronológica
+
+@app.post("/messages", response_model=MessageSchema)
+async def send_message(
+    message_data: MessageCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if message_data.receiver_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot send message to yourself")
+
+    # Verificar se o receptor existe
+    receiver = db.query(User).filter(User.id == message_data.receiver_id).first()
+    if not receiver:
+        raise HTTPException(status_code=404, detail="Receiver not found")
+
+    # Buscar ou criar conversa
+    conversation = db.query(Conversation).filter(
+        or_(
+            and_(Conversation.user1_id == current_user.id, Conversation.user2_id == message_data.receiver_id),
+            and_(Conversation.user1_id == message_data.receiver_id, Conversation.user2_id == current_user.id)
+        )
+    ).first()
+
+    if not conversation:
+        conversation = Conversation(
+            user1_id=min(current_user.id, message_data.receiver_id),
+            user2_id=max(current_user.id, message_data.receiver_id)
+        )
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+
+    # Criar mensagem
+    message = Message(
+        conversation_id=conversation.id,
+        sender_id=current_user.id,
+        receiver_id=message_data.receiver_id,
+        content=message_data.content,
+        message_type=message_data.message_type
+    )
+    db.add(message)
+
+    # Atualizar timestamp da conversa
+    conversation.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(message)
+
+    return message
+
+@app.post("/messages/image", response_model=MessageSchema)
+async def send_image_message(
+    receiver_id: int = Form(...),
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if receiver_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot send message to yourself")
+
+    # Verificar se o receptor existe
+    receiver = db.query(User).filter(User.id == receiver_id).first()
+    if not receiver:
+        raise HTTPException(status_code=404, detail="Receiver not found")
+
+    # Salvar imagem
+    file_extension = image.filename.split(".")[-1]
+    filename = f"message_{uuid.uuid4()}.{file_extension}"
+    file_path = f"uploads/{filename}"
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(image.file, buffer)
+
+    # Buscar ou criar conversa
+    conversation = db.query(Conversation).filter(
+        or_(
+            and_(Conversation.user1_id == current_user.id, Conversation.user2_id == receiver_id),
+            and_(Conversation.user1_id == receiver_id, Conversation.user2_id == current_user.id)
+        )
+    ).first()
+
+    if not conversation:
+        conversation = Conversation(
+            user1_id=min(current_user.id, receiver_id),
+            user2_id=max(current_user.id, receiver_id)
+        )
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+
+    # Criar mensagem
+    message = Message(
+        conversation_id=conversation.id,
+        sender_id=current_user.id,
+        receiver_id=receiver_id,
+        image_url=f"/uploads/{filename}",
+        message_type="image"
+    )
+    db.add(message)
+
+    # Atualizar timestamp da conversa
+    conversation.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(message)
+
+    return message
 
 if __name__ == "__main__":
     import uvicorn

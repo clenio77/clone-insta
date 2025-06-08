@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { usersAPI, postsAPI } from '../services/api';
+import MessageButton from '../components/MessageButton';
 
 function Profile({ currentUser }) {
   const { username } = useParams();
@@ -73,12 +74,18 @@ function Profile({ currentUser }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <h1>{profile.username}</h1>
             {!isOwnProfile && (
-              <button
-                className={profile.is_following ? 'unfollow-btn' : 'follow-btn'}
-                onClick={handleFollow}
-              >
-                {profile.is_following ? 'Unfollow' : 'Follow'}
-              </button>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  className={profile.is_following ? 'unfollow-btn' : 'follow-btn'}
+                  onClick={handleFollow}
+                >
+                  {profile.is_following ? 'Unfollow' : 'Follow'}
+                </button>
+                <MessageButton
+                  userId={profile.id}
+                  username={profile.username}
+                />
+              </div>
             )}
           </div>
           

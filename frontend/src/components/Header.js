@@ -12,6 +12,7 @@ function Header({ user, onLogout }) {
           <Link to="/">Home</Link>
           <Link to="/upload">Upload</Link>
           <Link to="/create-story">Story</Link>
+          <Link to="/messages">Messages</Link>
           <Link to={`/profile/${user.username}`}>Profile</Link>
           <button onClick={onLogout}>Logout</button>
         </nav>

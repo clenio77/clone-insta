@@ -62,4 +62,17 @@ export const storiesAPI = {
   getStoryViews: (storyId) => api.get(`/stories/${storyId}/views`),
 };
 
+// Messages API
+export const messagesAPI = {
+  getConversations: () => api.get('/conversations'),
+  getOrCreateConversation: (userId) => api.get(`/conversations/${userId}`),
+  getMessages: (conversationId, skip = 0, limit = 50) => api.get(`/conversations/${conversationId}/messages?skip=${skip}&limit=${limit}`),
+  sendMessage: (messageData) => api.post('/messages', messageData),
+  sendImageMessage: (formData) => api.post('/messages/image', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  }),
+};
+
 export default api;

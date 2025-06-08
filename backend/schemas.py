@@ -110,6 +110,47 @@ class StoryView(BaseModel):
     class Config:
         from_attributes = True
 
+# Message schemas
+class MessageBase(BaseModel):
+    content: Optional[str] = None
+    message_type: str = "text"
+
+class MessageCreate(MessageBase):
+    receiver_id: int
+
+class Message(MessageBase):
+    id: int
+    conversation_id: int
+    sender_id: int
+    receiver_id: int
+    image_url: Optional[str] = None
+    is_read: bool
+    created_at: datetime
+    sender: User
+    receiver: User
+
+    class Config:
+        from_attributes = True
+
+# Conversation schemas
+class ConversationBase(BaseModel):
+    pass
+
+class Conversation(ConversationBase):
+    id: int
+    user1_id: int
+    user2_id: int
+    created_at: datetime
+    updated_at: datetime
+    user1: User
+    user2: User
+    last_message: Optional[Message] = None
+    unread_count: int = 0
+    other_user: Optional[User] = None
+
+    class Config:
+        from_attributes = True
+
 # Token schemas
 class Token(BaseModel):
     access_token: str
