@@ -84,7 +84,17 @@ docker-compose up --build
 - Backend API: http://localhost:8000
 - Documentação da API: http://localhost:8000/docs
 
-4. **Teste as funcionalidades:**
+4. **Criar usuários de demonstração (opcional):**
+   ```bash
+   python3 create_demo_users.py
+   ```
+
+5. **Fazer login:**
+   - **Usuários demo**: john_doe, jane_smith, mike_wilson, sarah_jones, alex_brown
+   - **Senha**: password123
+   - **Ou criar sua própria conta**
+
+6. **Teste as funcionalidades:**
    - **Posts**: Upload de múltiplas imagens/vídeos
    - **Stories**: Criar e visualizar stories temporários
    - **Messages**: Chat privado com outros usuários
