@@ -10,8 +10,8 @@ from typing import List
 import uuid
 
 from database import SessionLocal, engine, get_db
-from models import Base, User, Post, Like, Comment, Story, StoryView, Conversation, Message, Notification
-from schemas import UserCreate, UserLogin, Token, PostCreate, CommentCreate, User as UserSchema, Post as PostSchema, Comment as CommentSchema, UserProfile, StoryCreate, Story as StorySchema, StoryView as StoryViewSchema, MessageCreate, Message as MessageSchema, Conversation as ConversationSchema, Notification as NotificationSchema
+from models import Base, User, Post, Like, Comment, Story, StoryView, Conversation, Message, Notification, Hashtag
+from schemas import UserCreate, UserLogin, Token, PostCreate, CommentCreate, User as UserSchema, Post as PostSchema, Comment as CommentSchema, UserProfile, StoryCreate, Story as StorySchema, StoryView as StoryViewSchema, MessageCreate, Message as MessageSchema, Conversation as ConversationSchema, Notification as NotificationSchema, Hashtag as HashtagSchema
 from auth import authenticate_user, create_access_token, get_current_active_user, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
 
 # Criar tabelas
@@ -48,6 +48,25 @@ def create_notification(db: Session, receiver_id: int, sender_id: int, notificat
     db.add(notification)
     db.commit()
     return notification
+
+# Função para processar hashtags
+def process_hashtags(db: Session, post: Post):
+    hashtag_names = post.extract_hashtags()
+
+    for hashtag_name in hashtag_names:
+        # Buscar ou criar hashtag
+        hashtag = db.query(Hashtag).filter(Hashtag.name == hashtag_name).first()
+        if not hashtag:
+            hashtag = Hashtag(name=hashtag_name, posts_count=0)
+            db.add(hashtag)
+            db.flush()  # Para obter o ID
+
+        # Associar hashtag ao post se ainda não estiver associada
+        if hashtag not in post.hashtags:
+            post.hashtags.append(hashtag)
+            hashtag.posts_count += 1
+
+    db.commit()
 
 # Auth endpoints
 @app.post("/auth/register", response_model=UserSchema)
@@ -188,6 +207,9 @@ async def create_post(
     db.add(db_post)
     db.commit()
     db.refresh(db_post)
+
+    # Processar hashtags
+    process_hashtags(db, db_post)
 
     # Adicionar dados extras
     db_post.author = current_user
@@ -760,6 +782,72 @@ async def search_users(
     ).limit(limit).all()
 
     return users
+
+@app.get("/search/hashtags", response_model=List[HashtagSchema])
+async def search_hashtags(
+    q: str,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if not q or len(q.strip()) < 1:
+        return []
+
+    search_term = f"%{q.strip().lower()}%"
+
+    hashtags = db.query(Hashtag).filter(
+        Hashtag.name.ilike(search_term)
+    ).order_by(desc(Hashtag.posts_count)).limit(limit).all()
+
+    return hashtags
+
+@app.get("/hashtags/{hashtag_name}", response_model=HashtagSchema)
+async def get_hashtag(
+    hashtag_name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    hashtag = db.query(Hashtag).filter(Hashtag.name == hashtag_name.lower()).first()
+    if not hashtag:
+        raise HTTPException(status_code=404, detail="Hashtag not found")
+
+    return hashtag
+
+@app.get("/hashtags/{hashtag_name}/posts", response_model=List[PostSchema])
+async def get_hashtag_posts(
+    hashtag_name: str,
+    skip: int = 0,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    hashtag = db.query(Hashtag).filter(Hashtag.name == hashtag_name.lower()).first()
+    if not hashtag:
+        raise HTTPException(status_code=404, detail="Hashtag not found")
+
+    posts = db.query(Post).join(Post.hashtags).filter(
+        Hashtag.id == hashtag.id
+    ).order_by(desc(Post.created_at)).offset(skip).limit(limit).all()
+
+    # Adicionar dados extras para cada post
+    for post in posts:
+        post.likes_count = len(post.likes)
+        post.comments_count = len(post.comments)
+        post.is_liked = any(like.user_id == current_user.id for like in post.likes)
+
+    return posts
+
+@app.get("/hashtags/trending", response_model=List[HashtagSchema])
+async def get_trending_hashtags(
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    hashtags = db.query(Hashtag).filter(
+        Hashtag.posts_count > 0
+    ).order_by(desc(Hashtag.posts_count)).limit(limit).all()
+
+    return hashtags
 
 if __name__ == "__main__":
     import uvicorn

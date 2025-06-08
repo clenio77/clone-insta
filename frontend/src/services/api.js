@@ -86,6 +86,14 @@ export const notificationsAPI = {
 // Search API
 export const searchAPI = {
   searchUsers: (query, limit = 20) => api.get(`/search/users?q=${encodeURIComponent(query)}&limit=${limit}`),
+  searchHashtags: (query, limit = 20) => api.get(`/search/hashtags?q=${encodeURIComponent(query)}&limit=${limit}`),
+};
+
+// Hashtags API
+export const hashtagsAPI = {
+  getHashtag: (hashtagName) => api.get(`/hashtags/${hashtagName}`),
+  getHashtagPosts: (hashtagName, skip = 0, limit = 20) => api.get(`/hashtags/${hashtagName}/posts?skip=${skip}&limit=${limit}`),
+  getTrendingHashtags: (limit = 10) => api.get(`/hashtags/trending?limit=${limit}`),
 };
 
 export default api;

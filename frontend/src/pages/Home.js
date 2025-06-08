@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Post from '../components/Post';
 import Stories from '../components/Stories';
+import TrendingHashtags from '../components/TrendingHashtags';
 import { postsAPI } from '../services/api';
 
 function Home({ user }) {
@@ -43,14 +44,21 @@ function Home({ user }) {
 
   return (
     <div className="container">
-      <Stories currentUser={user} />
-      {posts.map(post => (
-        <Post
-          key={post.id}
-          post={post}
-          onUpdate={loadPosts}
-        />
-      ))}
+      <div className="home-layout">
+        <div className="home-main">
+          <Stories currentUser={user} />
+          {posts.map(post => (
+            <Post
+              key={post.id}
+              post={post}
+              onUpdate={loadPosts}
+            />
+          ))}
+        </div>
+        <div className="home-sidebar">
+          <TrendingHashtags />
+        </div>
+      </div>
     </div>
   );
 }

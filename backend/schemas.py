@@ -170,6 +170,18 @@ class Notification(NotificationBase):
     class Config:
         from_attributes = True
 
+# Hashtag schemas
+class HashtagBase(BaseModel):
+    name: str
+
+class Hashtag(HashtagBase):
+    id: int
+    posts_count: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 # Token schemas
 class Token(BaseModel):
     access_token: str

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { postsAPI, commentsAPI } from '../services/api';
+import HashtagText from './HashtagText';
 
 function Post({ post, onUpdate }) {
   const [isLiked, setIsLiked] = useState(post.is_liked);
@@ -83,7 +84,7 @@ function Post({ post, onUpdate }) {
       {post.caption && (
         <div className="post-caption">
           <span className="username">{post.author.username}</span>
-          {post.caption}
+          <HashtagText text={post.caption} />
         </div>
       )}
       

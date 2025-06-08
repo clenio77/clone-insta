@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, Bool
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime, timedelta
+import re
 from database import Base
 
 # Tabela de associação para seguidores
@@ -10,6 +11,14 @@ followers_table = Table(
     Base.metadata,
     Column('follower_id', Integer, ForeignKey('users.id'), primary_key=True),
     Column('followed_id', Integer, ForeignKey('users.id'), primary_key=True)
+)
+
+# Tabela de associação para hashtags e posts
+post_hashtags_table = Table(
+    'post_hashtags',
+    Base.metadata,
+    Column('post_id', Integer, ForeignKey('posts.id'), primary_key=True),
+    Column('hashtag_id', Integer, ForeignKey('hashtags.id'), primary_key=True)
 )
 
 class User(Base):
@@ -71,6 +80,14 @@ class Post(Base):
     author = relationship("User", back_populates="posts")
     likes = relationship("Like", back_populates="post", cascade="all, delete-orphan")
     comments = relationship("Comment", back_populates="post", cascade="all, delete-orphan")
+    hashtags = relationship("Hashtag", secondary=post_hashtags_table, back_populates="posts")
+
+    def extract_hashtags(self):
+        """Extrai hashtags do caption do post"""
+        if not self.caption:
+            return []
+        hashtag_pattern = r'#(\w+)'
+        return re.findall(hashtag_pattern, self.caption.lower())
 
 class Like(Base):
     __tablename__ = "likes"
@@ -178,6 +195,17 @@ class Message(Base):
     conversation = relationship("Conversation", back_populates="messages")
     sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_messages")
     receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_messages")
+
+class Hashtag(Base):
+    __tablename__ = "hashtags"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+    posts_count = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relacionamentos
+    posts = relationship("Post", secondary=post_hashtags_table, back_populates="hashtags")
 
 class Notification(Base):
     __tablename__ = "notifications"
