@@ -69,18 +69,19 @@ class User(Base):
 
 class Post(Base):
     __tablename__ = "posts"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     caption = Column(Text, default="")
-    image_url = Column(String, nullable=False)
+    image_url = Column(String, nullable=True)  # Para compatibilidade com posts antigos
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    
+
     # Relacionamentos
     author = relationship("User", back_populates="posts")
     likes = relationship("Like", back_populates="post", cascade="all, delete-orphan")
     comments = relationship("Comment", back_populates="post", cascade="all, delete-orphan")
     hashtags = relationship("Hashtag", secondary=post_hashtags_table, back_populates="posts")
+    images = relationship("PostImage", back_populates="post", cascade="all, delete-orphan")
 
     def extract_hashtags(self):
         """Extrai hashtags do caption do post"""
@@ -89,14 +90,33 @@ class Post(Base):
         hashtag_pattern = r'#(\w+)'
         return re.findall(hashtag_pattern, self.caption.lower())
 
+    @property
+    def primary_image_url(self):
+        """Retorna a URL da primeira imagem ou a image_url legacy"""
+        if self.images:
+            return self.images[0].image_url
+        return self.image_url
+
+class PostImage(Base):
+    __tablename__ = "post_images"
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("posts.id"), nullable=False)
+    image_url = Column(String, nullable=False)
+    order_index = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relacionamentos
+    post = relationship("Post", back_populates="images")
+
 class Like(Base):
     __tablename__ = "likes"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     post_id = Column(Integer, ForeignKey("posts.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
+
     # Relacionamentos
     user = relationship("User", back_populates="likes")
     post = relationship("Post", back_populates="likes")

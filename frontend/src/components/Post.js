@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { postsAPI, commentsAPI } from '../services/api';
 import HashtagText from './HashtagText';
+import ImageCarousel from './ImageCarousel';
 
 function Post({ post, onUpdate }) {
   const [isLiked, setIsLiked] = useState(post.is_liked);
@@ -62,11 +63,16 @@ function Post({ post, onUpdate }) {
         </Link>
       </header>
       
-      <img 
-        src={`http://localhost:8000${post.image_url}`} 
-        alt={post.caption} 
-        className="post-image"
-      />
+      {/* Usar carrossel se há múltiplas imagens, senão imagem única */}
+      {post.images && post.images.length > 0 ? (
+        <ImageCarousel images={post.images} className="post-image" />
+      ) : (
+        <img
+          src={`http://localhost:8000${post.image_url || post.primary_image_url}`}
+          alt={post.caption}
+          className="post-image"
+        />
+      )}
       
       <div className="post-actions">
         <button onClick={handleLike}>

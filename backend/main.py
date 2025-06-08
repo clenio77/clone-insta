@@ -10,8 +10,8 @@ from typing import List
 import uuid
 
 from database import SessionLocal, engine, get_db
-from models import Base, User, Post, Like, Comment, Story, StoryView, Conversation, Message, Notification, Hashtag
-from schemas import UserCreate, UserLogin, Token, PostCreate, CommentCreate, User as UserSchema, Post as PostSchema, Comment as CommentSchema, UserProfile, StoryCreate, Story as StorySchema, StoryView as StoryViewSchema, MessageCreate, Message as MessageSchema, Conversation as ConversationSchema, Notification as NotificationSchema, Hashtag as HashtagSchema
+from models import Base, User, Post, Like, Comment, Story, StoryView, Conversation, Message, Notification, Hashtag, PostImage
+from schemas import UserCreate, UserLogin, Token, PostCreate, CommentCreate, User as UserSchema, Post as PostSchema, Comment as CommentSchema, UserProfile, StoryCreate, Story as StorySchema, StoryView as StoryViewSchema, MessageCreate, Message as MessageSchema, Conversation as ConversationSchema, Notification as NotificationSchema, Hashtag as HashtagSchema, PostImage as PostImageSchema
 from auth import authenticate_user, create_access_token, get_current_active_user, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
 
 # Criar tabelas
@@ -186,25 +186,46 @@ async def unfollow_user(
 @app.post("/posts", response_model=PostSchema)
 async def create_post(
     caption: str = Form(""),
-    image: UploadFile = File(...),
+    images: List[UploadFile] = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    # Salvar imagem
-    file_extension = image.filename.split(".")[-1]
-    filename = f"{uuid.uuid4()}.{file_extension}"
-    file_path = f"uploads/{filename}"
+    if not images or len(images) == 0:
+        raise HTTPException(status_code=400, detail="At least one image is required")
 
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(image.file, buffer)
+    if len(images) > 10:
+        raise HTTPException(status_code=400, detail="Maximum 10 images allowed")
 
     # Criar post
     db_post = Post(
         caption=caption,
-        image_url=f"/uploads/{filename}",
         author_id=current_user.id
     )
     db.add(db_post)
+    db.commit()
+    db.refresh(db_post)
+
+    # Salvar imagens
+    for index, image in enumerate(images):
+        file_extension = image.filename.split(".")[-1]
+        filename = f"post_{db_post.id}_{index}_{uuid.uuid4()}.{file_extension}"
+        file_path = f"uploads/{filename}"
+
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(image.file, buffer)
+
+        # Criar registro da imagem
+        post_image = PostImage(
+            post_id=db_post.id,
+            image_url=f"/uploads/{filename}",
+            order_index=index
+        )
+        db.add(post_image)
+
+    # Para compatibilidade, definir image_url como a primeira imagem
+    if images:
+        db_post.image_url = f"/uploads/post_{db_post.id}_0_{uuid.uuid4().hex[:8]}.{images[0].filename.split('.')[-1]}"
+
     db.commit()
     db.refresh(db_post)
 
@@ -237,6 +258,7 @@ async def get_feed(
         post.likes_count = len(post.likes)
         post.comments_count = len(post.comments)
         post.is_liked = any(like.user_id == current_user.id for like in post.likes)
+        post.primary_image_url = post.primary_image_url
 
     return posts
 
@@ -253,6 +275,7 @@ async def get_post(
     post.likes_count = len(post.likes)
     post.comments_count = len(post.comments)
     post.is_liked = any(like.user_id == current_user.id for like in post.likes)
+    post.primary_image_url = post.primary_image_url
 
     return post
 

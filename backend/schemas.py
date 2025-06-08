@@ -31,6 +31,19 @@ class UserProfile(User):
     posts_count: int
     is_following: bool = False
 
+# Post Image schemas
+class PostImageBase(BaseModel):
+    image_url: str
+    order_index: int = 0
+
+class PostImage(PostImageBase):
+    id: int
+    post_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 # Post schemas
 class PostBase(BaseModel):
     caption: Optional[str] = ""
@@ -40,14 +53,16 @@ class PostCreate(PostBase):
 
 class Post(PostBase):
     id: int
-    image_url: str
+    image_url: Optional[str] = None  # Para compatibilidade
     created_at: datetime
     author_id: int
     author: User
     likes_count: int
     comments_count: int
     is_liked: bool = False
-    
+    images: List[PostImage] = []
+    primary_image_url: Optional[str] = None
+
     class Config:
         from_attributes = True
 
