@@ -1,0 +1,20 @@
+FROM node:16
+
+WORKDIR /app
+
+# Desabilitar ESLint cache para evitar problemas de permissão
+ENV ESLINT_NO_DEV_ERRORS=true
+ENV GENERATE_SOURCEMAP=false
+ENV DISABLE_ESLINT_PLUGIN=true
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+# Criar diretório de cache com permissões corretas
+RUN mkdir -p node_modules/.cache && chmod -R 777 node_modules/.cache
+
+EXPOSE 3000
+
+CMD ["npm", "start"]
