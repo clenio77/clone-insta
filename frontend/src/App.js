@@ -9,6 +9,7 @@ import Upload from './pages/Upload';
 import CreateStory from './pages/CreateStory';
 import Messages from './pages/Messages';
 import Notifications from './pages/Notifications';
+import Search from './pages/Search';
 import { authAPI } from './services/api';
 
 function App() {
@@ -84,6 +85,10 @@ function App() {
             <Route
               path="/notifications"
               element={user ? <Notifications /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/search"
+              element={user ? <Search currentUser={user} /> : <Navigate to="/login" />}
             />
             <Route
               path="/profile/:username"

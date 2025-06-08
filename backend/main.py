@@ -738,6 +738,29 @@ async def mark_all_notifications_as_read(
 
     return {"message": f"Marked {len(notifications)} notifications as read"}
 
+# Search endpoints
+@app.get("/search/users", response_model=List[UserSchema])
+async def search_users(
+    q: str,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    if not q or len(q.strip()) < 2:
+        return []
+
+    search_term = f"%{q.strip()}%"
+
+    users = db.query(User).filter(
+        or_(
+            User.username.ilike(search_term),
+            User.full_name.ilike(search_term)
+        ),
+        User.id != current_user.id  # Excluir o próprio usuário
+    ).limit(limit).all()
+
+    return users
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

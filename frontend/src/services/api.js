@@ -83,4 +83,9 @@ export const notificationsAPI = {
   markAllAsRead: () => api.post('/notifications/mark-all-read'),
 };
 
+// Search API
+export const searchAPI = {
+  searchUsers: (query, limit = 20) => api.get(`/search/users?q=${encodeURIComponent(query)}&limit=${limit}`),
+};
+
 export default api;
