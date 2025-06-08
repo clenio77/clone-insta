@@ -44,6 +44,21 @@ class PostImage(PostImageBase):
     class Config:
         from_attributes = True
 
+# Post Video schemas
+class PostVideoBase(BaseModel):
+    video_url: str
+    thumbnail_url: Optional[str] = None
+    duration: Optional[int] = None
+    order_index: int = 0
+
+class PostVideo(PostVideoBase):
+    id: int
+    post_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 # Post schemas
 class PostBase(BaseModel):
     caption: Optional[str] = ""
@@ -61,7 +76,10 @@ class Post(PostBase):
     comments_count: int
     is_liked: bool = False
     images: List[PostImage] = []
+    videos: List[PostVideo] = []
     primary_image_url: Optional[str] = None
+    has_videos: bool = False
+    media_type: str = "image"
 
     class Config:
         from_attributes = True

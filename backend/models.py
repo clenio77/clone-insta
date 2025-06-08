@@ -82,6 +82,7 @@ class Post(Base):
     comments = relationship("Comment", back_populates="post", cascade="all, delete-orphan")
     hashtags = relationship("Hashtag", secondary=post_hashtags_table, back_populates="posts")
     images = relationship("PostImage", back_populates="post", cascade="all, delete-orphan")
+    videos = relationship("PostVideo", back_populates="post", cascade="all, delete-orphan")
 
     def extract_hashtags(self):
         """Extrai hashtags do caption do post"""
@@ -97,6 +98,21 @@ class Post(Base):
             return self.images[0].image_url
         return self.image_url
 
+    @property
+    def has_videos(self):
+        """Verifica se o post tem vídeos"""
+        return len(self.videos) > 0
+
+    @property
+    def media_type(self):
+        """Retorna o tipo de mídia do post"""
+        if self.videos:
+            return "video" if len(self.videos) == 1 and len(self.images) == 0 else "mixed"
+        elif self.images:
+            return "image"
+        else:
+            return "image"  # fallback para posts antigos
+
 class PostImage(Base):
     __tablename__ = "post_images"
 
@@ -108,6 +124,20 @@ class PostImage(Base):
 
     # Relacionamentos
     post = relationship("Post", back_populates="images")
+
+class PostVideo(Base):
+    __tablename__ = "post_videos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("posts.id"), nullable=False)
+    video_url = Column(String, nullable=False)
+    thumbnail_url = Column(String, nullable=True)
+    duration = Column(Integer, nullable=True)  # em segundos
+    order_index = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relacionamentos
+    post = relationship("Post", back_populates="videos")
 
 class Like(Base):
     __tablename__ = "likes"

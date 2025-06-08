@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { postsAPI, commentsAPI } from '../services/api';
 import HashtagText from './HashtagText';
 import ImageCarousel from './ImageCarousel';
+import MediaCarousel from './MediaCarousel';
 
 function Post({ post, onUpdate }) {
   const [isLiked, setIsLiked] = useState(post.is_liked);
@@ -63,9 +64,13 @@ function Post({ post, onUpdate }) {
         </Link>
       </header>
       
-      {/* Usar carrossel se há múltiplas imagens, senão imagem única */}
-      {post.images && post.images.length > 0 ? (
-        <ImageCarousel images={post.images} className="post-image" />
+      {/* Usar carrossel misto se há imagens e/ou vídeos */}
+      {(post.images && post.images.length > 0) || (post.videos && post.videos.length > 0) ? (
+        <MediaCarousel
+          images={post.images || []}
+          videos={post.videos || []}
+          className="post-media"
+        />
       ) : (
         <img
           src={`http://localhost:8000${post.image_url || post.primary_image_url}`}

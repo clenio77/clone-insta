@@ -10,8 +10,8 @@ from typing import List
 import uuid
 
 from database import SessionLocal, engine, get_db
-from models import Base, User, Post, Like, Comment, Story, StoryView, Conversation, Message, Notification, Hashtag, PostImage
-from schemas import UserCreate, UserLogin, Token, PostCreate, CommentCreate, User as UserSchema, Post as PostSchema, Comment as CommentSchema, UserProfile, StoryCreate, Story as StorySchema, StoryView as StoryViewSchema, MessageCreate, Message as MessageSchema, Conversation as ConversationSchema, Notification as NotificationSchema, Hashtag as HashtagSchema, PostImage as PostImageSchema
+from models import Base, User, Post, Like, Comment, Story, StoryView, Conversation, Message, Notification, Hashtag, PostImage, PostVideo
+from schemas import UserCreate, UserLogin, Token, PostCreate, CommentCreate, User as UserSchema, Post as PostSchema, Comment as CommentSchema, UserProfile, StoryCreate, Story as StorySchema, StoryView as StoryViewSchema, MessageCreate, Message as MessageSchema, Conversation as ConversationSchema, Notification as NotificationSchema, Hashtag as HashtagSchema, PostImage as PostImageSchema, PostVideo as PostVideoSchema
 from auth import authenticate_user, create_access_token, get_current_active_user, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
 
 # Criar tabelas
@@ -186,15 +186,18 @@ async def unfollow_user(
 @app.post("/posts", response_model=PostSchema)
 async def create_post(
     caption: str = Form(""),
-    images: List[UploadFile] = File(...),
+    images: List[UploadFile] = File(None),
+    videos: List[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    if not images or len(images) == 0:
-        raise HTTPException(status_code=400, detail="At least one image is required")
+    # Verificar se há pelo menos uma mídia
+    total_media = (len(images) if images else 0) + (len(videos) if videos else 0)
+    if total_media == 0:
+        raise HTTPException(status_code=400, detail="At least one image or video is required")
 
-    if len(images) > 10:
-        raise HTTPException(status_code=400, detail="Maximum 10 images allowed")
+    if total_media > 10:
+        raise HTTPException(status_code=400, detail="Maximum 10 media files allowed")
 
     # Criar post
     db_post = Post(
@@ -205,24 +208,53 @@ async def create_post(
     db.commit()
     db.refresh(db_post)
 
+    media_index = 0
+
     # Salvar imagens
-    for index, image in enumerate(images):
-        file_extension = image.filename.split(".")[-1]
-        filename = f"post_{db_post.id}_{index}_{uuid.uuid4()}.{file_extension}"
-        file_path = f"uploads/{filename}"
+    if images:
+        for image in images:
+            file_extension = image.filename.split(".")[-1].lower()
+            if file_extension not in ['jpg', 'jpeg', 'png', 'gif', 'webp']:
+                raise HTTPException(status_code=400, detail=f"Unsupported image format: {file_extension}")
 
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
+            filename = f"post_{db_post.id}_{media_index}_{uuid.uuid4()}.{file_extension}"
+            file_path = f"uploads/{filename}"
 
-        # Criar registro da imagem
-        post_image = PostImage(
-            post_id=db_post.id,
-            image_url=f"/uploads/{filename}",
-            order_index=index
-        )
-        db.add(post_image)
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(image.file, buffer)
 
-    # Para compatibilidade, definir image_url como a primeira imagem
+            # Criar registro da imagem
+            post_image = PostImage(
+                post_id=db_post.id,
+                image_url=f"/uploads/{filename}",
+                order_index=media_index
+            )
+            db.add(post_image)
+            media_index += 1
+
+    # Salvar vídeos
+    if videos:
+        for video in videos:
+            file_extension = video.filename.split(".")[-1].lower()
+            if file_extension not in ['mp4', 'mov', 'avi', 'mkv', 'webm']:
+                raise HTTPException(status_code=400, detail=f"Unsupported video format: {file_extension}")
+
+            filename = f"post_{db_post.id}_{media_index}_{uuid.uuid4()}.{file_extension}"
+            file_path = f"uploads/{filename}"
+
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(video.file, buffer)
+
+            # Criar registro do vídeo
+            post_video = PostVideo(
+                post_id=db_post.id,
+                video_url=f"/uploads/{filename}",
+                order_index=media_index
+            )
+            db.add(post_video)
+            media_index += 1
+
+    # Para compatibilidade, definir image_url
     if images:
         db_post.image_url = f"/uploads/post_{db_post.id}_0_{uuid.uuid4().hex[:8]}.{images[0].filename.split('.')[-1]}"
 
@@ -237,6 +269,8 @@ async def create_post(
     db_post.likes_count = 0
     db_post.comments_count = 0
     db_post.is_liked = False
+    db_post.has_videos = db_post.has_videos
+    db_post.media_type = db_post.media_type
 
     return db_post
 
@@ -259,6 +293,8 @@ async def get_feed(
         post.comments_count = len(post.comments)
         post.is_liked = any(like.user_id == current_user.id for like in post.likes)
         post.primary_image_url = post.primary_image_url
+        post.has_videos = post.has_videos
+        post.media_type = post.media_type
 
     return posts
 
@@ -276,6 +312,8 @@ async def get_post(
     post.comments_count = len(post.comments)
     post.is_liked = any(like.user_id == current_user.id for like in post.likes)
     post.primary_image_url = post.primary_image_url
+    post.has_videos = post.has_videos
+    post.media_type = post.media_type
 
     return post
 
