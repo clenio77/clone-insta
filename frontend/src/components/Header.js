@@ -11,6 +11,7 @@ function Header({ user, onLogout }) {
         <nav className="nav-links">
           <Link to="/">Home</Link>
           <Link to="/upload">Upload</Link>
+          <Link to="/create-story">Story</Link>
           <Link to={`/profile/${user.username}`}>Profile</Link>
           <button onClick={onLogout}>Logout</button>
         </nav>

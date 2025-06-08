@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Post from '../components/Post';
+import Stories from '../components/Stories';
 import { postsAPI } from '../services/api';
 
 function Home({ user }) {
@@ -42,10 +43,11 @@ function Home({ user }) {
 
   return (
     <div className="container">
+      <Stories currentUser={user} />
       {posts.map(post => (
-        <Post 
-          key={post.id} 
-          post={post} 
+        <Post
+          key={post.id}
+          post={post}
           onUpdate={loadPosts}
         />
       ))}

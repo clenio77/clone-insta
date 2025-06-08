@@ -49,4 +49,17 @@ export const commentsAPI = {
   getComments: (postId, skip = 0, limit = 50) => api.get(`/posts/${postId}/comments?skip=${skip}&limit=${limit}`),
 };
 
+// Stories API
+export const storiesAPI = {
+  createStory: (formData) => api.post('/stories', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  }),
+  getStories: () => api.get('/stories'),
+  getUserStories: (username) => api.get(`/stories/user/${username}`),
+  viewStory: (storyId) => api.post(`/stories/${storyId}/view`),
+  getStoryViews: (storyId) => api.get(`/stories/${storyId}/views`),
+};
+
 export default api;

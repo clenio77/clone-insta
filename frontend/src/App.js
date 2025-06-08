@@ -6,6 +6,7 @@ import Register from './pages/Register';
 import Home from './pages/Home';
 import Profile from './pages/Profile';
 import Upload from './pages/Upload';
+import CreateStory from './pages/CreateStory';
 import { authAPI } from './services/api';
 
 function App() {
@@ -62,13 +63,17 @@ function App() {
               path="/" 
               element={user ? <Home user={user} /> : <Navigate to="/login" />} 
             />
-            <Route 
-              path="/upload" 
-              element={user ? <Upload /> : <Navigate to="/login" />} 
+            <Route
+              path="/upload"
+              element={user ? <Upload /> : <Navigate to="/login" />}
             />
-            <Route 
-              path="/profile/:username" 
-              element={user ? <Profile currentUser={user} /> : <Navigate to="/login" />} 
+            <Route
+              path="/create-story"
+              element={user ? <CreateStory /> : <Navigate to="/login" />}
+            />
+            <Route
+              path="/profile/:username"
+              element={user ? <Profile currentUser={user} /> : <Navigate to="/login" />}
             />
           </Routes>
         </main>

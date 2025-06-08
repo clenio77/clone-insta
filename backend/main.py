@@ -2,15 +2,15 @@ from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, F
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import timedelta, datetime
 import shutil
 import os
 from typing import List
 import uuid
 
 from database import SessionLocal, engine, get_db
-from models import Base, User, Post, Like, Comment
-from schemas import UserCreate, UserLogin, Token, PostCreate, CommentCreate, User as UserSchema, Post as PostSchema, Comment as CommentSchema, UserProfile
+from models import Base, User, Post, Like, Comment, Story, StoryView
+from schemas import UserCreate, UserLogin, Token, PostCreate, CommentCreate, User as UserSchema, Post as PostSchema, Comment as CommentSchema, UserProfile, StoryCreate, Story as StorySchema, StoryView as StoryViewSchema
 from auth import authenticate_user, create_access_token, get_current_active_user, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
 
 # Criar tabelas
@@ -277,6 +277,134 @@ async def get_comments(
 ):
     comments = db.query(Comment).filter(Comment.post_id == post_id).order_by(Comment.created_at.desc()).offset(skip).limit(limit).all()
     return comments
+
+# Story endpoints
+@app.post("/stories", response_model=StorySchema)
+async def create_story(
+    text_content: str = Form(""),
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    # Salvar imagem
+    file_extension = image.filename.split(".")[-1]
+    filename = f"story_{uuid.uuid4()}.{file_extension}"
+    file_path = f"uploads/{filename}"
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(image.file, buffer)
+
+    # Criar story
+    db_story = Story(
+        text_content=text_content,
+        image_url=f"/uploads/{filename}",
+        author_id=current_user.id,
+        expires_at=datetime.utcnow() + timedelta(hours=24)
+    )
+    db.add(db_story)
+    db.commit()
+    db.refresh(db_story)
+
+    # Adicionar dados extras
+    db_story.author = current_user
+    db_story.views_count = 0
+    db_story.is_viewed = False
+    db_story.is_expired = False
+
+    return db_story
+
+@app.get("/stories", response_model=List[StorySchema])
+async def get_stories(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    # Buscar stories dos usuários seguidos + próprios stories (não expirados)
+    following_ids = [user.id for user in current_user.following]
+    following_ids.append(current_user.id)
+
+    current_time = datetime.utcnow()
+    stories = db.query(Story).filter(
+        Story.author_id.in_(following_ids),
+        Story.expires_at > current_time,
+        Story.is_active == True
+    ).order_by(Story.created_at.desc()).all()
+
+    # Adicionar dados extras para cada story
+    for story in stories:
+        story.views_count = len(story.views)
+        story.is_expired = story.expires_at <= current_time
+        # Verificar se o usuário atual já viu este story
+        story.is_viewed = any(view.viewer_id == current_user.id for view in story.views)
+
+    return stories
+
+@app.get("/stories/user/{username}", response_model=List[StorySchema])
+async def get_user_stories(
+    username: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    current_time = datetime.utcnow()
+    stories = db.query(Story).filter(
+        Story.author_id == user.id,
+        Story.expires_at > current_time,
+        Story.is_active == True
+    ).order_by(Story.created_at.desc()).all()
+
+    # Adicionar dados extras
+    for story in stories:
+        story.views_count = len(story.views)
+        story.is_expired = story.expires_at <= current_time
+        story.is_viewed = any(view.viewer_id == current_user.id for view in story.views)
+
+    return stories
+
+@app.post("/stories/{story_id}/view")
+async def view_story(
+    story_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    story = db.query(Story).filter(Story.id == story_id).first()
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+
+    if story.is_expired:
+        raise HTTPException(status_code=400, detail="Story has expired")
+
+    # Verificar se já visualizou
+    existing_view = db.query(StoryView).filter(
+        StoryView.story_id == story_id,
+        StoryView.viewer_id == current_user.id
+    ).first()
+
+    if not existing_view:
+        view = StoryView(story_id=story_id, viewer_id=current_user.id)
+        db.add(view)
+        db.commit()
+
+    return {"message": "Story viewed successfully"}
+
+@app.get("/stories/{story_id}/views", response_model=List[StoryViewSchema])
+async def get_story_views(
+    story_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    story = db.query(Story).filter(Story.id == story_id).first()
+    if not story:
+        raise HTTPException(status_code=404, detail="Story not found")
+
+    # Apenas o autor pode ver quem visualizou
+    if story.author_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to view story views")
+
+    views = db.query(StoryView).filter(StoryView.story_id == story_id).order_by(StoryView.viewed_at.desc()).all()
+    return views
 
 if __name__ == "__main__":
     import uvicorn

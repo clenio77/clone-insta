@@ -78,6 +78,38 @@ class Like(BaseModel):
     class Config:
         from_attributes = True
 
+# Story schemas
+class StoryBase(BaseModel):
+    text_content: Optional[str] = ""
+
+class StoryCreate(StoryBase):
+    pass
+
+class Story(StoryBase):
+    id: int
+    image_url: str
+    created_at: datetime
+    expires_at: datetime
+    author_id: int
+    author: User
+    is_active: bool
+    is_expired: bool
+    views_count: int
+    is_viewed: bool = False
+
+    class Config:
+        from_attributes = True
+
+class StoryView(BaseModel):
+    id: int
+    story_id: int
+    viewer_id: int
+    viewed_at: datetime
+    viewer: User
+
+    class Config:
+        from_attributes = True
+
 # Token schemas
 class Token(BaseModel):
     access_token: str
