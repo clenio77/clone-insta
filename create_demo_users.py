@@ -3,7 +3,16 @@
 Script para criar usuários de demonstração no Instagram Clone
 """
 
-import requests
+try:
+    import requests
+except ImportError:
+    print("❌ Módulo 'requests' não encontrado!")
+    print("💡 Para instalar, execute:")
+    print("   pip install requests")
+    print("   ou")
+    print("   cd backend && source venv/bin/activate && pip install requests")
+    exit(1)
+
 import json
 
 BASE_URL = "http://localhost:8001"
