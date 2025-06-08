@@ -75,4 +75,12 @@ export const messagesAPI = {
   }),
 };
 
+// Notifications API
+export const notificationsAPI = {
+  getNotifications: (skip = 0, limit = 50) => api.get(`/notifications?skip=${skip}&limit=${limit}`),
+  getUnreadCount: () => api.get('/notifications/unread-count'),
+  markAsRead: (notificationId) => api.post(`/notifications/${notificationId}/read`),
+  markAllAsRead: () => api.post('/notifications/mark-all-read'),
+};
+
 export default api;

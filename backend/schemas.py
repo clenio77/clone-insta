@@ -151,6 +151,25 @@ class Conversation(ConversationBase):
     class Config:
         from_attributes = True
 
+# Notification schemas
+class NotificationBase(BaseModel):
+    notification_type: str
+    message: str
+
+class Notification(NotificationBase):
+    id: int
+    receiver_id: int
+    sender_id: Optional[int] = None
+    related_post_id: Optional[int] = None
+    related_comment_id: Optional[int] = None
+    is_read: bool
+    created_at: datetime
+    sender: Optional[User] = None
+    related_post: Optional[Post] = None
+
+    class Config:
+        from_attributes = True
+
 # Token schemas
 class Token(BaseModel):
     access_token: str

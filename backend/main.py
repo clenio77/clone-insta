@@ -10,8 +10,8 @@ from typing import List
 import uuid
 
 from database import SessionLocal, engine, get_db
-from models import Base, User, Post, Like, Comment, Story, StoryView, Conversation, Message
-from schemas import UserCreate, UserLogin, Token, PostCreate, CommentCreate, User as UserSchema, Post as PostSchema, Comment as CommentSchema, UserProfile, StoryCreate, Story as StorySchema, StoryView as StoryViewSchema, MessageCreate, Message as MessageSchema, Conversation as ConversationSchema
+from models import Base, User, Post, Like, Comment, Story, StoryView, Conversation, Message, Notification
+from schemas import UserCreate, UserLogin, Token, PostCreate, CommentCreate, User as UserSchema, Post as PostSchema, Comment as CommentSchema, UserProfile, StoryCreate, Story as StorySchema, StoryView as StoryViewSchema, MessageCreate, Message as MessageSchema, Conversation as ConversationSchema, Notification as NotificationSchema
 from auth import authenticate_user, create_access_token, get_current_active_user, get_password_hash, ACCESS_TOKEN_EXPIRE_MINUTES
 
 # Criar tabelas
@@ -31,6 +31,23 @@ app.add_middleware(
 # Servir arquivos estáticos
 os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+# Função para criar notificações
+def create_notification(db: Session, receiver_id: int, sender_id: int, notification_type: str, message: str, related_post_id: int = None, related_comment_id: int = None):
+    if receiver_id == sender_id:
+        return  # Não criar notificação para si mesmo
+
+    notification = Notification(
+        receiver_id=receiver_id,
+        sender_id=sender_id,
+        notification_type=notification_type,
+        message=message,
+        related_post_id=related_post_id,
+        related_comment_id=related_comment_id
+    )
+    db.add(notification)
+    db.commit()
+    return notification
 
 # Auth endpoints
 @app.post("/auth/register", response_model=UserSchema)
@@ -118,6 +135,15 @@ async def follow_user(
     if current_user not in user_to_follow.followers:
         user_to_follow.followers.append(current_user)
         db.commit()
+
+        # Criar notificação
+        create_notification(
+            db=db,
+            receiver_id=user_to_follow.id,
+            sender_id=current_user.id,
+            notification_type="follow",
+            message=f"{current_user.username} started following you"
+        )
 
     return {"message": "User followed successfully"}
 
@@ -227,6 +253,16 @@ async def like_post(
     db.add(like)
     db.commit()
 
+    # Criar notificação
+    create_notification(
+        db=db,
+        receiver_id=post.author_id,
+        sender_id=current_user.id,
+        notification_type="like",
+        message=f"{current_user.username} liked your post",
+        related_post_id=post_id
+    )
+
     return {"message": "Post liked successfully"}
 
 @app.delete("/posts/{post_id}/like")
@@ -264,6 +300,17 @@ async def create_comment(
     db.add(db_comment)
     db.commit()
     db.refresh(db_comment)
+
+    # Criar notificação
+    create_notification(
+        db=db,
+        receiver_id=post.author_id,
+        sender_id=current_user.id,
+        notification_type="comment",
+        message=f"{current_user.username} commented on your post",
+        related_post_id=post_id,
+        related_comment_id=db_comment.id
+    )
 
     db_comment.author = current_user
     return db_comment
@@ -560,6 +607,15 @@ async def send_message(
     db.commit()
     db.refresh(message)
 
+    # Criar notificação
+    create_notification(
+        db=db,
+        receiver_id=message_data.receiver_id,
+        sender_id=current_user.id,
+        notification_type="message",
+        message=f"{current_user.username} sent you a message"
+    )
+
     return message
 
 @app.post("/messages/image", response_model=MessageSchema)
@@ -619,6 +675,68 @@ async def send_image_message(
     db.refresh(message)
 
     return message
+
+# Notifications endpoints
+@app.get("/notifications", response_model=List[NotificationSchema])
+async def get_notifications(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    notifications = db.query(Notification).filter(
+        Notification.receiver_id == current_user.id
+    ).order_by(desc(Notification.created_at)).offset(skip).limit(limit).all()
+
+    return notifications
+
+@app.get("/notifications/unread-count")
+async def get_unread_notifications_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    count = db.query(Notification).filter(
+        Notification.receiver_id == current_user.id,
+        Notification.is_read == False
+    ).count()
+
+    return {"unread_count": count}
+
+@app.post("/notifications/{notification_id}/read")
+async def mark_notification_as_read(
+    notification_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    notification = db.query(Notification).filter(
+        Notification.id == notification_id,
+        Notification.receiver_id == current_user.id
+    ).first()
+
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    notification.is_read = True
+    db.commit()
+
+    return {"message": "Notification marked as read"}
+
+@app.post("/notifications/mark-all-read")
+async def mark_all_notifications_as_read(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    notifications = db.query(Notification).filter(
+        Notification.receiver_id == current_user.id,
+        Notification.is_read == False
+    ).all()
+
+    for notification in notifications:
+        notification.is_read = True
+
+    db.commit()
+
+    return {"message": f"Marked {len(notifications)} notifications as read"}
 
 if __name__ == "__main__":
     import uvicorn

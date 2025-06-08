@@ -37,6 +37,10 @@ class User(Base):
     received_messages = relationship("Message", foreign_keys="Message.receiver_id", back_populates="receiver", cascade="all, delete-orphan")
     conversations_as_user1 = relationship("Conversation", foreign_keys="Conversation.user1_id", back_populates="user1", cascade="all, delete-orphan")
     conversations_as_user2 = relationship("Conversation", foreign_keys="Conversation.user2_id", back_populates="user2", cascade="all, delete-orphan")
+
+    # Notifications
+    sent_notifications = relationship("Notification", foreign_keys="Notification.sender_id", back_populates="sender", cascade="all, delete-orphan")
+    received_notifications = relationship("Notification", foreign_keys="Notification.receiver_id", back_populates="receiver", cascade="all, delete-orphan")
     
     # Seguidores e seguindo
     followers = relationship(
@@ -174,3 +178,22 @@ class Message(Base):
     conversation = relationship("Conversation", back_populates="messages")
     sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_messages")
     receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_messages")
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    receiver_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    notification_type = Column(String, nullable=False)  # like, comment, follow, message
+    message = Column(Text, nullable=False)
+    related_post_id = Column(Integer, ForeignKey("posts.id"), nullable=True)
+    related_comment_id = Column(Integer, ForeignKey("comments.id"), nullable=True)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relacionamentos
+    receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_notifications")
+    sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_notifications")
+    related_post = relationship("Post", foreign_keys=[related_post_id])
+    related_comment = relationship("Comment", foreign_keys=[related_comment_id])
